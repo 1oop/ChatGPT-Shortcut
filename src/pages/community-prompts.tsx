@@ -13,41 +13,23 @@ import Layout from "@theme/Layout";
 import Head from "@docusaurus/Head";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import Link from "@docusaurus/Link";
-import { Modal, Pagination, App, Flex, Segmented, FloatButton, Row, Col, Breadcrumb, Skeleton, Button } from "antd";
+import { App, Flex, Segmented, FloatButton, Row, Col, Breadcrumb, Button } from "antd";
 import { HomeOutlined, WarningOutlined } from "@ant-design/icons";
 import { COMMU_TITLE, COMMU_DESCRIPTION, SITE_NAME } from "@site/src/data/constants";
 import { toBcp47 } from "@site/src/utils/i18n";
 import { toJsonLd } from "@site/src/utils/jsonLd";
 import { EmptyState } from "@site/src/components/EmptyState";
+import { Pagination } from "@site/src/components/Pagination";
+import { LoginModal } from "@site/src/components/user/LoginModal";
 import PromptCard from "@site/src/components/PromptCard";
 import { PromptCardSkeleton } from "@site/src/components/PromptCardSkeleton";
 import styles from "@site/src/pages/styles.module.css";
-import { primeCacheFromSnapshot, communitySnapshot, COMMUNITY_PAGE_SIZE, type CommunitySortField, type CommunityPrompt } from "@site/src/utils/snapshotPrime";
+import { COMMUNITY_PAGE_SIZE } from "@site/src/utils/communityPagination.mjs";
+import { primeCacheFromSnapshot, getCommunitySnapshotPage, type CommunitySortField, type CommunityPrompt } from "@site/src/utils/snapshotPrime";
 import { lazyWithRetry, lazyOptional } from "@site/src/utils/lazyRetry";
 const PromptDetailModal = lazyWithRetry(() => import("@site/src/components/PromptDetailModal").then((m) => ({ default: m.PromptDetailModal })));
 
 const ShareButtons = lazyOptional(() => import("@site/src/components/ShareButtons"));
-// LoginComponent (520 行 + antd Form/Card/Input) 仅当未登录用户打开登录 Modal 才渲染
-const LoginComponent = lazyWithRetry(() => import("@site/src/components/user/login"));
-
-interface SnapshotView {
-  items: CommunityPrompt[];
-  total: number;
-}
-
-// snapshot 文件里 byNewest/byUpvoted 只存 ids；items 从 byId 拼出，避免 JSON 里同一条 prompt 被存两遍
-// 快照只覆盖首页 + 默认排序，避免分页/搜索/异常排序的旧数据污染
-// 空 stub 兜底：fresh clone 时 ensure-only 写出 ids=[] 的占位 JSON，此时返回 null
-// 让初始渲染走 skeleton + API 兜底，避免闪一下「无结果」
-function getSnapshotView(page: number, sortField: CommunitySortField, searchTerm: string): SnapshotView | null {
-  if (page !== 1 || searchTerm) return null;
-  const index = sortField === "id" ? communitySnapshot.byNewest : sortField === "upvoteDifference" ? communitySnapshot.byUpvoted : null;
-  if (!index || index.ids.length === 0) return null;
-
-  const items = index.ids.map((id) => communitySnapshot.byId[String(id)]).filter(Boolean);
-  if (items.length === 0) return null;
-  return { items, total: index.total };
-}
 
 const CommunityPrompts = () => {
   const { userAuth, getUserAuth } = useContext(AuthContext);
@@ -108,7 +90,7 @@ const CommunityPrompts = () => {
     }
   }, []);
 
-  const initialSnapshot = useMemo(() => getSnapshotView(1, "id", ""), []);
+  const initialSnapshot = useMemo(() => getCommunitySnapshotPage("id"), []);
   const [open, setOpen] = useState(false);
   const [userprompts, setUserPrompts] = useState<CommunityPrompt[]>(initialSnapshot?.items ?? []);
   const [currentPage, setCurrentPage] = useState(1);
@@ -196,7 +178,7 @@ const CommunityPrompts = () => {
     const wasSeeded = skipNextSnapshotFill.current;
     skipNextSnapshotFill.current = false;
 
-    const snapshotView = wasSeeded ? null : getSnapshotView(currentPage, sortField, searchTerm);
+    const snapshotView = !wasSeeded && currentPage === 1 && !searchTerm ? getCommunitySnapshotPage(sortField) : null;
     // 快照只在「屏幕上还没有本次查询的内容」时填：同一次查询的后台刷新（重试、切语言）
     // 再填一遍快照，会拿构建期的旧数据盖掉刚拉到的活数据。
     if (!wasSeeded && snapshotView && contentQueryKeyRef.current !== queryKey) {
@@ -336,10 +318,10 @@ const CommunityPrompts = () => {
   }, []);
 
   // PromptCard 透传给 onToggleFavorite 的 callback：用 useCallback 锁住引用，
-  // 避免 inline lambda 让 12 张 React.memo 卡片每次父级 re-render 都失效
+  // 避免 inline lambda 让 React.memo 卡片每次父级 re-render 都失效
   const onToggleFavorite = useCallback((id: string | number) => bookmark(Number(id)), [bookmark]);
 
-  // 收藏 ID Set：12 张卡的 isFavorite 查询从 O(n) Array.includes 改 O(1) Set.has
+  // 收藏 ID Set：每张卡的 isFavorite 查询从 O(n) Array.includes 改 O(1) Set.has
   const commLovesSet = useMemo(() => new Set<number>(userAuth?.data?.favorites?.commLoves ?? []), [userAuth?.data?.favorites?.commLoves]);
 
   return (
@@ -351,15 +333,15 @@ const CommunityPrompts = () => {
         <script type="application/ld+json">{collectionSchemaJson}</script>
       </Head>
       <main className="margin-vert--md">
-        <section className="margin-top--sm margin-bottom--sm">
-          <div className="container padding-vert--md">
+        <section className="margin-bottom--sm">
+          <div className="container">
             {/* Breadcrumb — plain, matches community-prompt detail page style */}
             <Breadcrumb
               items={[
                 {
                   title: (
                     <Link to="/" style={{ color: "var(--site-color-tag-selected-text)" }}>
-                      <HomeOutlined style={{ marginRight: 4 }} />
+                      <HomeOutlined style={{ marginInlineEnd: 4 }} />
                       <Translate id="link.home">首页</Translate>
                     </Link>
                   ),
@@ -368,11 +350,11 @@ const CommunityPrompts = () => {
                   title: <Translate id="link.communityPrompts">社区提示词</Translate>,
                 },
               ]}
-              style={{ marginBottom: 12, paddingLeft: 8, paddingRight: 8 }}
+              style={{ marginBottom: 12 }}
             />
 
             {/* H1 + tagline — 给 AI 引擎主标题 chunk 入口；视觉上简洁不抢主体 */}
-            <div style={{ marginBottom: 24, paddingLeft: 8, paddingRight: 8 }}>
+            <div style={{ marginBottom: 18 }}>
               <h1 style={{ fontSize: 28, fontWeight: 600, letterSpacing: "-0.02em", margin: 0, color: "var(--ifm-color-content)" }}>
                 <Translate id="community.heading">AI 提示词社区</Translate>
               </h1>
@@ -381,10 +363,8 @@ const CommunityPrompts = () => {
               </h2>
             </div>
 
-            {/* H2 — Sort + Search 区段标题，给 AI 引擎第二个 chunk 入口 */}
-
             {/* Sort + Search — same row; search fills remaining space via flex: 1 */}
-            <Flex wrap="wrap" gap="middle" align="center" style={{ marginBottom: 24 }}>
+            <Flex wrap="wrap" gap="middle" align="center" style={{ marginBottom: 20 }}>
               <Segmented
                 options={[
                   { value: "id", label: translate({ id: "sort.newest", message: "最新发布" }) },
@@ -399,6 +379,9 @@ const CommunityPrompts = () => {
               <div style={{ flex: 1, minWidth: 240 }}>
                 <SearchBar beforeSearch={handleBeforeSearch} />
               </div>
+              <Suspense fallback={null}>
+                <ShareButtons shareUrl={ShareUrl} title={COMMU_TITLE} />
+              </Suspense>
             </Flex>
 
             {/* 三态按「归属的查询键」在渲染期判定，不用 effect 里写的旗标：
@@ -463,21 +446,13 @@ const CommunityPrompts = () => {
             </div>
 
             {open && (
-              <Modal open={open} footer={null} onCancel={() => setOpen(false)}>
-                <Suspense fallback={<Skeleton active paragraph={{ rows: 4 }} />}>
-                  <LoginComponent />
-                </Suspense>
-              </Modal>
+              <LoginModal open={open} onCancel={() => setOpen(false)} />
             )}
-            {modalOpen && (
+            {modalData && (
               <Suspense fallback={null}>
-                <PromptDetailModal open={modalOpen} onCancel={() => setModalOpen(false)} data={modalData} />
+                <PromptDetailModal open={modalOpen} onCancel={() => setModalOpen(false)} afterClose={() => setModalData(null)} data={modalData} />
               </Suspense>
             )}
-            <Suspense fallback={null}>
-              <ShareButtons shareUrl={ShareUrl} title={COMMU_TITLE} popOver={false} />
-            </Suspense>
-            {/* BackTop 上推 60px，避免与 ShareButtons FloatButton.Group（默认 bottom=40）重叠 */}
             <FloatButton.BackTop style={{ bottom: 100 }} />
           </div>
         </section>
