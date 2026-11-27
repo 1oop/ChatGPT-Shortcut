@@ -14,14 +14,16 @@ import { extractPlaceholders, applyPlaceholders, getPlaceholderValue, renderProm
 import type { CommunityPrompt } from "@site/src/utils/snapshotPrime";
 import { EmptyState } from "@site/src/components/EmptyState";
 import { ActionLink } from "@site/src/components/ActionLink";
-import { LoginModal } from "@site/src/components/user/LoginModal";
 import { toBcp47 } from "@site/src/utils/i18n";
 import { lazyOptional, lazyWithRetry } from "@site/src/utils/lazyRetry";
+import { DeferredComments } from "./DeferredComments";
 
 const ShareButtons = lazyOptional(() => import("./ShareButtons"));
-// 见 PromptPage 同名注释：静态 import 会把 Pagination + Form + react-markdown
-// 全链拖进 eager common chunk，每个页面都要下载。
-const Comments = lazyWithRetry(() => import("./Comments"));
+const LoginModal = lazyWithRetry(() =>
+  import("@site/src/components/user/LoginModal").then((m) => ({ default: m.LoginModal })),
+);
+// 与社区列表页（pages/community-prompts.tsx）同一份登录表单，同样只在未登录用户点
+// 点赞/收藏时才挂载并拉 chunk。
 
 interface CommunityPromptPageProps {
   prompt: CommunityPrompt | null;
@@ -41,7 +43,7 @@ const sheetCardStyle: React.CSSProperties = {
   background: "var(--ifm-background-surface-color)",
 };
 const sheetCardBodyStyle: React.CSSProperties = {
-  padding: "clamp(20px, 3vw, 32px)",
+  padding: "clamp(16px, 3vw, 32px)",
 };
 const monoNum: React.CSSProperties = { fontVariantNumeric: "tabular-nums" };
 
@@ -137,7 +139,7 @@ function CommunityPromptPage({ prompt, loading, error, notFound, onRetry, onVote
   if (loading) {
     return (
       <Layout title={translate({ id: "community.loading", message: "加载中…" })}>
-        <main>
+        <main style={{ minHeight: "100vh" }}>
           <Row justify="center" style={{ marginTop: 16, marginBottom: 24, paddingInline: 12 }}>
           <Col xs={24} sm={22} md={20} lg={18} xl={16} className="full-width-col">
             <Card variant="outlined" style={sheetCardStyle} styles={{ body: sheetCardBodyStyle }}>
@@ -394,15 +396,15 @@ function CommunityPromptPage({ prompt, loading, error, notFound, onRetry, onVote
                 </>
               )}
             </Eyebrow>
-            <Suspense fallback={<Skeleton active paragraph={{ rows: 4 }} />}>
-              <Comments pageId={prompt.id} type="userprompt" onCountChange={setCommentCount} />
-            </Suspense>
+            <DeferredComments pageId={prompt.id} type="userprompt" onCountChange={setCommentCount} />
           </Flex>
         </Col>
       </Row>
       </main>
       {loginOpen && (
-        <LoginModal open={loginOpen} onCancel={() => setLoginOpen(false)} />
+        <Suspense fallback={null}>
+          <LoginModal open={loginOpen} onCancel={() => setLoginOpen(false)} />
+        </Suspense>
       )}
     </Layout>
   );

@@ -7,7 +7,7 @@
 
 /* Hero Section — compact workbench header with breathing room below */
 .heroSection {
-  padding: 36px 0 40px;
+  padding: 28px 0 24px;
   position: relative;
   overflow: hidden;
 }
@@ -28,21 +28,68 @@
 
 /* Filter Container */
 .filterSection {
-  padding-top: 20px;
+  padding-top: 8px;
   margin-bottom: 16px;
-  border-top: 1px solid var(--site-color-hairline);
+}
+
+.collectionSection {
+  margin-top: 16px;
+}
+
+.communityToolbar {
+  margin-bottom: 20px;
+}
+
+.communitySearchWrap {
+  flex: 1;
+  min-width: 240px;
 }
 
 @media (max-width: 767px) {
   .heroSection {
-    padding: 6px 0 14px;
+    padding: 6px 0 10px;
   }
   .heroActions {
     padding-inline: 16px;
   }
   .filterSection {
-    padding-top: 14px;
+    padding-top: 6px;
     margin-bottom: 12px;
+  }
+  .collectionSection {
+    margin-top: 0;
+    padding-top: 2px;
+  }
+  .homeMain {
+    margin-top: 8px !important;
+    padding-bottom: 52px;
+  }
+  .communityToolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px !important;
+    margin-bottom: 14px;
+  }
+  .communityToolbar :global(.ant-segmented) {
+    width: 100%;
+    padding: 3px;
+  }
+  .communityToolbar :global(.ant-segmented-group) {
+    width: 100%;
+  }
+  .communityToolbar :global(.ant-segmented-item) {
+    flex: 1;
+    min-width: 0;
+  }
+  .communityToolbar :global(.ant-segmented-item-label) {
+    min-height: 30px;
+    line-height: 30px;
+    padding-inline: 10px;
+    font-size: 13px;
+  }
+  .communitySearchWrap {
+    width: 100%;
+    min-width: 0;
   }
 }
 .filterBar {
